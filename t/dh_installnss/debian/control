@@ -1,0 +1,89 @@
+Source: foo
+Section: misc
+Priority: optional
+Maintainer: Test <testing@example.org>
+Standards-Version: 3.9.8
+
+Package: foo-before1
+Architecture: all
+Description: package foo-before1
+
+Package: foo-before2
+Architecture: all
+Description: package foo-before2
+
+Package: foo-after1
+Architecture: all
+Description: package foo-after1
+
+Package: foo-after2
+Architecture: all
+Description: package foo-after2
+
+Package: foo-empty1
+Architecture: all
+Description: package foo-empty1
+
+Package: foo-empty2
+Architecture: all
+Description: package foo-empty2
+
+Package: foo-first1
+Architecture: all
+Description: package foo-first1
+
+Package: foo-first2
+Architecture: all
+Description: package foo-first2
+
+Package: foo-first3
+Architecture: all
+Description: package foo-first3
+
+Package: foo-last1
+Architecture: all
+Description: package foo-last1
+
+Package: foo-last2
+Architecture: all
+Description: package foo-last2
+
+Package: foo-last3
+Architecture: all
+Description: package foo-last3
+
+Package: foo-multidb1
+Architecture: all
+Description: package foo-multidb1
+
+Package: foo-newdb1
+Architecture: all
+Description: package foo-newdb1
+
+Package: foo-newdb2
+Architecture: all
+Description: package foo-newdb2
+
+Package: foo-newdb3
+Architecture: all
+Description: package foo-newdb3
+
+Package: foo-remove-only1
+Architecture: all
+Description: package foo-remove-only1
+
+Package: foo-other
+Architecture: all
+Description: package foo-other
+
+Package: foo-example
+Architecture: all
+Description: package foo-example
+
+Package: foo-skip
+Architecture: all
+Description: package foo-skip
+
+Package: foo-substring
+Architecture: all
+Description: package foo-substring

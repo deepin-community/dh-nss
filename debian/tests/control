@@ -1,0 +1,13 @@
+Tests:
+ doc-example,
+ doc-example-comments,
+ multiple-pkgs,
+ no-nsswitch-conf,
+ reproducibility,
+Depends: @, debhelper-compat (= 13), build-essential
+Restrictions: allow-stderr, breaks-testbed, needs-root
+
+Tests:
+ shellcheck,
+Depends: @, debhelper-compat (= 13), build-essential, shellcheck
+Restrictions: allow-stderr, superficial

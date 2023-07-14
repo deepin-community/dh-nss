@@ -1,0 +1,61 @@
+#!/bin/sh
+
+set -eu
+
+. "$(dirname "$0")/shared-functions.sh"
+
+testname="$(basename "$0")"
+pkgname="libnss-test-$testname"
+
+nss_lines="
+hosts before=dns mdns4
+hosts before=mdns4 mdns4_minimal [NOTFOUND=return]
+hosts remove-only mdns    # In case the user manually added it
+"
+
+expected_services="files mdns4_minimal [NOTFOUND=return] mdns4 dns"
+
+echo "Set up and build test packages..."
+cd "$AUTOPKGTEST_TMP"
+mkdir "$pkgname"
+cd "$pkgname"
+setup_pkg "$pkgname" "$testname"
+build_pkg "$pkgname" "1" "$nss_lines"
+build_pkg "$pkgname" "2" "$nss_lines"
+cd "$AUTOPKGTEST_TMP"
+
+echo "Set up /etc/nsswitch.conf..."
+echo "$NSSWITCH_CONF" > /etc/nsswitch.conf
+check_line "hosts" "files dns"
+
+echo "Test that installing the package installs the services..."
+dpkg --install "${pkgname}_1_all.deb"
+check_line "hosts" "$expected_services"
+
+echo "Test that updating the package does not install the services again..."
+dpkg --install "${pkgname}_2_all.deb"
+check_line "hosts" "$expected_services"
+
+echo "Test that removing the package removes the services..."
+dpkg --remove "$pkgname"
+check_line "hosts" "files dns"
+
+echo "Test that installing the package again reinstalls the services..."
+dpkg --install "${pkgname}_2_all.deb"
+check_line "hosts" "$expected_services"
+
+echo "Test that removing the package again removes the services..."
+dpkg --remove "$pkgname"
+check_line "hosts" "files dns"
+
+echo "Test that reinstalling the package injects the services..."
+dpkg --install "${pkgname}_1_all.deb"
+check_line "hosts" "$expected_services"
+
+echo "Manually remove services from /etc/nsswitch.conf..."
+echo "$NSSWITCH_CONF" > /etc/nsswitch.conf
+check_line "hosts" "files dns"
+
+echo "Test that upgrading the package after modifying nsswitch.conf does not inject the services again..."
+dpkg --install "${pkgname}_2_all.deb"
+check_line "hosts" "files dns"

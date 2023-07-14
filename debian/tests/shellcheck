@@ -1,0 +1,36 @@
+#!/bin/sh
+
+set -eu
+
+. "$(dirname "$0")/shared-functions.sh"
+
+testname="$(basename "$0")"
+pkgname="libnss-test-$testname"
+
+nss_lines="
+passwd  last         mynss
+group   before=files mynss
+shadow  after=files  mynss [!SUCCESS=notfound]
+gshadow first        mynss [NOTFOUND=return]
+hosts   remove-only  mynss
+protocols after=db   mynss skip-if-present=files
+"
+
+echo "Set up and build test package..."
+cd "$AUTOPKGTEST_TMP"
+mkdir "$pkgname"
+cd "$pkgname"
+setup_pkg "$pkgname" "$testname"
+build_pkg "$pkgname" "1" "$nss_lines"
+
+echo "Extract maintscripts..."
+cd "$AUTOPKGTEST_TMP"
+dpkg-deb -e "${pkgname}_1_all.deb" control
+
+echo "Check for errors and warnings..."
+cd control/
+test -s postinst
+test -s postrm
+shellcheck postinst
+shellcheck postrm
+echo "OK"

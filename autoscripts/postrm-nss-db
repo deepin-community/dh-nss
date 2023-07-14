@@ -1,0 +1,6 @@
+: "${DPKG_MAINTSCRIPT_PACKAGE_INSTCOUNT:=$(dpkg-query -f '${db:Status-Abbrev}\n' -W "$DPKG_MAINTSCRIPT_PACKAGE" | grep -c '^i')}"
+if { [ "$1" = "remove" ] || [ "$1" = "purge" ] ; } && [ -e "${DPKG_ROOT}/etc/nsswitch.conf" ] && [ "$DPKG_MAINTSCRIPT_PACKAGE_INSTCOUNT" -eq 0 ] ; then
+	if grep -q -E '^#DB#:\s*$' "${DPKG_ROOT}/etc/nsswitch.conf" ; then
+		sed -E -i "${DPKG_ROOT}/etc/nsswitch.conf" -e '/^#DB#:/d'
+	fi
+fi

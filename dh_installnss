@@ -1,0 +1,459 @@
+#!/usr/bin/perl
+
+=head1 NAME
+
+dh_installnss - enable NSS services
+
+=cut
+
+use strict;
+use warnings;
+use Debian::Debhelper::Dh_Lib;
+
+our $VERSION = "1.7";
+
+=head1 SYNOPSIS
+
+B<dh_installnss> [S<I<debhelper options>>]
+
+=head1 DESCRIPTION
+
+B<dh_installnss> is a debhelper program that is responsible for injecting
+NSS (Name Service Switch) services into F</etc/nsswitch.conf>.
+
+=head1 FILES
+
+=over 4
+
+=item debian/I<package>.nss
+
+Lists the services to inject into F</etc/nsswitch.conf> when a package is
+configured and to remove when a package is removed or purged.
+
+Each line in that file (a I<directive>) should be of the form
+
+I<db> I<position> I<service> I<action> I<condition>
+
+where the fields contain the following pieces of information:
+
+=over
+
+=item I<db>
+
+The NSS database in which the service will be added.
+Usually C<hosts>.
+
+=item I<position>
+
+Where to add the NSS service.
+
+Possible values are C<first>, C<last>, C<before=I<service>>,
+C<after=I<service>>, plus the pseudo-positions C<remove-only>,
+C<database-add> and C<database-require>.
+
+The pseudo-position C<remove-only> is used to mark services that are not
+going to be added during the installation of the package, but that will
+be removed during its deinstallation (e.g., legacy services).
+
+The pseudo-position C<database-add> is used to request the addition of a
+non-standard NSS database to F</etc/nsswitch.conf> during the installation
+of the package and its removal during the deinstallation of the package.
+When C<database-add> is used, all other fields in the directive should
+be left empty.
+
+The pseudo-position C<database-require> is used to announce that one
+or more services in the I<nss> file will be installed under a
+non-standard NSS database added by another package.
+When C<database-require> is used, all other fields in the directive
+should be left empty.
+
+=item I<service>
+
+The name of the NSS service to add.
+
+=item I<action>
+
+Optional action specification C<[STATE=ACTION]>.
+
+=item I<condition>
+
+Optional set of conditions to better define when
+a service should (or should not) be installed.
+
+Only one kind of condition is currently defined:
+C<skip-if-present=I<service,service,...>>.
+
+=back
+
+Additionally, text between a C<#> character and the end of line is ignored.
+
+=back
+
+=head1 EXAMPLES
+
+An example F<debian/nss> file could look like this:
+
+    hosts before=dns mdns4
+    hosts before=mdns4 mdns4_minimal [NOTFOUND=return]
+    hosts remove-only mdns    # In case the user manually added it
+
+After the installation of this package, the original configuration of
+the B<hosts> database in B</etc/nsswitch.conf> will change from:
+
+    hosts:    files dns
+
+to:
+
+    hosts:    files mdns4_minimal [NOTFOUND=return] mdns4 dns
+
+=head1 CAVEATS
+
+=head2 Non-standard NSS databases
+
+Directives in a F<I<package>.nss> file can reference a non-standard
+NSS database only if that database has been first declared with a
+C<database-add> or C<database-require> directive in the same file.
+
+Non-standard NSS databases are all databases that are not defined in
+F</etc/nsswitch.conf> as shipped by the package B<base-files>.
+
+If a directive references an undeclared non-standard NSS database
+(e.g., C<somedb>), B<dh_installnss> will exit with the error message
+C<Unknown NSS database 'somedb'>.
+
+A non-standard NSS database can be declared by at most one installed
+package.
+In other words, if the directives in the B<nss> files of two packages
+A and B reference the same non-standard NSS database C<somedb> and
+both packages can be installed at the same time, one of the following
+two solutions must be implemented:
+
+=over
+
+=item 1.
+
+Package A supplies the C<somedb database-add> directive, package B
+I<Pre-Depend>s on A and uses a C<somedb database-require> directive.
+
+=item 2.
+
+The shared package C supplies the C<somedb database-add> directive,
+both package A and B I<Pre-Depend> on C and use a
+C<somedb database-require> directive.
+
+=back
+
+=cut
+
+use constant NSS_DATABASES => qw(passwd group shadow gshadow hosts networks protocols services ethers rpc netgroup);
+use constant POSITIONS => qw(first last before after remove-only database database-add database-require); # TODO: remove 'database' in v2
+use constant SERVICE_NAME_RE => qr/^[a-zA-Z0-9+:\@_-]+$/;
+use constant ACTION_RE => qr/^\[!?[A-Za-z]+=[A-Za-z]+\]$/;
+use constant CONDITION_TESTS => qw(skip-if-present);
+
+init();
+
+# PROMISE: DH NOOP WITHOUT nss cli-options()
+
+sub process {
+	foreach my $package (getpackages()) {
+		my @dbs_extra_add = ();
+		my @dbs_extra_require = ();
+		my @service_names = ();
+		my @inst_lines = ();
+		my %db_services = ();
+
+		my $nss = pkgfile($package, "nss") or next;
+		open(my $fd, $nss) or die("open($nss): $!");
+		foreach my $line (<$fd>) {
+			$line =~ s/#.*$//; # Remove comments.
+			chomp($line);
+			next if ($line eq "");
+
+			my ($db, $service_name, $position, $inst_line) = process_line($line, $package, $nss, $., \@dbs_extra_add, \@dbs_extra_require);
+
+			if (($position eq "database-add") || ($position eq "database")) { # TODO: remove 'database' in v2
+				# Collect names of extra NSS databases to be added.
+				if (! grep { $_ eq $db } @dbs_extra_add) {
+					push(@dbs_extra_add, $db);
+				}
+				next;
+			}
+
+			if (($position eq "database-require")) {
+				# Collect names of known non-standard NSS databases.
+				if (! grep { $_ eq $db } @dbs_extra_require) {
+					push(@dbs_extra_require, $db);
+				}
+				next;
+			}
+
+			# Collect the names of NSS services installed by this package,
+			# as well as their installation command lines.
+			if (! grep { $_ eq $service_name } @service_names) {
+				push(@service_names, $service_name);
+			}
+			push(@inst_lines, $inst_line) unless ($position eq "remove-only");
+
+			# Collect the names of the NSS services that will be removed
+			# when this package will be uninstalled.
+			# The services are grouped by NSS DB.
+			if (! exists $db_services{$db}) { @{$db_services{$db}} = (); }
+			if (! grep { $_ eq $service_name } @{$db_services{$db}}) {
+				push(@{$db_services{$db}}, $service_name);
+			}
+		}
+		close($fd);
+
+		if (!@dbs_extra_add && !@inst_lines && !%db_services) {
+			warning("$nss exists but contains no actionable directives.");
+		}
+
+		# Generate the required debhelper snippets.
+		output_autoscripts($package, \@dbs_extra_add, \@inst_lines, \%db_services);
+	}
+}
+
+sub process_line {
+	my ($line, $package, $nss_file, $line_num, $dbs_extra_add, $dbs_extra_require) = @_;
+
+	my ($db, $position, $service, $action, $condition) = split(" ", $line);
+	$service //= "";
+	$action //= "";
+	$condition //= "";
+
+	# Turn before=service into pos=before, anchor=service.
+	($position, my $anchors) = split("=", $position);
+	$anchors //= "";
+
+	# Use $action as condition if it does not look like a proper action.
+	if (substr($action, 0, 1) ne "[") {
+		$condition = $action;
+		$action = "";
+	}
+
+	validate_line($nss_file, $line_num, $db, $position, $service, $action, $condition, $dbs_extra_add, $dbs_extra_require);
+
+	my $comment = comment_for_line($package, $db, $service, $position, $anchors, $action, $condition);
+	my $inst_operation = inst_operation_expr($package, $db, $service, $position, $anchors, $action, $condition);
+	my $inst_line = "$comment\n\t\t$inst_operation";
+
+	return $db, $service, $position, $inst_line;
+}
+
+sub validate_line {
+	my ($nss_file, $line_num, $db, $position, $service, $action, $condition, $dbs_extra_add, $dbs_extra_require) = @_;
+	my @dbs_extra_add = @{$dbs_extra_add};
+	my @dbs_extra_require = @{$dbs_extra_require};
+
+	if (! grep({ $_ eq $db } NSS_DATABASES)) {
+		if (!($position eq "database-add" || $position eq "database-require" || $position eq "database") # TODO: remove 'database' in v2
+			&& ! grep({$_ eq $db } (@dbs_extra_add, @dbs_extra_require))) {
+			error("Unknown NSS database '$db' [$nss_file:$line_num]");
+		}
+	}
+
+	if (! grep({ $_ eq $position } POSITIONS)) {
+		error("Unknown position '$position' [$nss_file:$line_num]");
+	}
+
+	if ($position eq "database-add" || $position eq "database-require" || $position eq "database") { # TODO: remove database' in v2
+		if ($position eq "database") { # TODO: remove check in v2
+			warning("Outdated 'database' directive will be removed in dh-nss v2. Use 'database-add' instead. [$nss_file:$line_num]");
+		}
+		return;
+	}
+
+	if ($service !~ SERVICE_NAME_RE) {
+		warning("Malformed service name '$service' [$nss_file:$line_num]");
+	}
+
+	if ($action && $action !~ ACTION_RE) {
+		warning("Malformed action specification '$action' [$nss_file:$line_num]");
+	}
+
+	if ($condition) {
+		my ($cond_test, $cond_value) = split("=", $condition);
+		if ($cond_test && !grep({ $_ eq $cond_test } CONDITION_TESTS)) {
+			error("Invalid condition test '$cond_test' (part of '$condition') [$nss_file:$line_num]");
+		}
+		if ($cond_test eq "skip-if-present") {
+			foreach my $cond_service (split(",", $cond_value)) {
+				if ($cond_service !~ SERVICE_NAME_RE) {
+					warning("Invalid condition value '$cond_value' (part of '$condition') [$nss_file:$line_num]");
+					last;
+				}
+			}
+		}
+	}
+}
+
+sub comment_for_line {
+	my ($package, $db, $service, $position, $anchors, $action, $condition) = @_;
+
+	my $comment = "# Installing $db/$service$action from $package in position $position";
+	if ($anchors ne "") { $comment .= "=$anchors"; }
+	if ($condition ne "") { $comment .= " ($condition)"; }
+
+	return $comment;
+}
+
+sub inst_operation_expr {
+	my ($package, $db, $service, $position, $anchors, $action, $condition) = @_;
+
+	my $anchors_expr = anchors_expr($anchors);
+
+	my $condition_expr = cond_expr($db, $condition);
+
+	# Prepare a sed-ready string with the service name.
+	my $service_complete = $service;
+	$service_complete .= " $action" if ($action ne "");
+	$service_complete =~ s/(\[|\])/\\$1/g; # Escape `[` and `]`.
+
+	# Choose the right sed invocation for the required position.
+	my $sed_cmd = 'sed -E -i "${DPKG_ROOT}/etc/nsswitch.conf"';
+	if ($position eq "first") {
+		$sed_cmd .= " -e '/^$db:\\s/ s/(:\\s+)/\\1$service_complete /'";
+	} elsif ($position eq "last") {
+		$sed_cmd .= " -e '/^$db:\\s[^#]*\$/ s/\$/ $service_complete/'";
+		$sed_cmd .= " -e '/^$db:\\s.*#/ s/#/ $service_complete #/'";
+	} elsif ($position eq "before") {
+		$sed_cmd .= " -e '/^$db:\\s[^#]*\$/ s/(\\s)($anchors_expr)(\\s|\$)/\\1$service_complete \\2 /'" ;
+		$sed_cmd .= " -e '/^$db:\\s.*#/ s/(\\s)($anchors_expr)(\\s|#)/\\1$service_complete \\2 /'" ;
+		$sed_cmd .= " -e 's/ \$//'";
+	} elsif ($position eq "after") {
+		$sed_cmd .= " -e '/^$db:\\s[^#]*\$/ s/(\\s)($anchors_expr)(\\s|\$)/\\1\\2 $service_complete /'";
+		$sed_cmd .= " -e '/^$db:\\s.*#/ s/(\\s)($anchors_expr)(\\s|#)/\\1\\2 $service_complete \\3/'";
+		$sed_cmd .= " -e 's/ \$//'";
+	} elsif ($position eq "remove-only") {
+		$sed_cmd = "";
+	}
+
+	if ($condition_expr ne "") {
+		$sed_cmd = "if $condition_expr ; then\n\t\t\t$sed_cmd\n\t\tfi";
+	}
+
+	return $sed_cmd;
+}
+
+sub anchors_expr {
+	my ($anchors_str) = @_;
+	if (! defined($anchors_str)) { return "" };
+
+	my @anchors_res;
+	foreach my $anchor (split(",", $anchors_str)) {
+		my $anchor_re = "$anchor(\\s+\\[[^]]+\\])?";
+		push(@anchors_res, $anchor_re)	;
+	}
+
+	my $anchors_expr = join("|", @anchors_res);
+
+	return $anchors_expr;
+}
+
+sub cond_expr {
+	my ($db, $cond_str) = @_;
+	if ($cond_str eq "") { return "" };
+
+	my $cond_expr = "grep -q -E ";
+	if ($cond_str =~ /^skip-if-present=/ ) {
+		my $services = $cond_str =~ s/^skip-if-present=//r;
+		$services =~ s/,/|/g;
+		$cond_expr = "! $cond_expr";
+		$cond_expr .= "'^$db:.*\\s($services)(\\s|\$)'"
+	} else {
+		error("Cannot parse condition $cond_str");
+	}
+
+	$cond_expr .= ' "${DPKG_ROOT}/etc/nsswitch.conf"';
+	return $cond_expr
+}
+
+sub service_patterns_expr {
+	my ($db_services) = @_;
+	my %db_services = %{$db_services};
+
+	my @exprs = "";
+	my @dbs = sort(keys %db_services);
+	foreach my $db (@dbs) {
+		my $db_services_expr = $db_services{$db};
+		my $expr = "-e '^$db:[^#]*\\s($db_services_expr)(\\s|#|\$)'";
+		push(@exprs, $expr);
+	}
+
+	my $service_patterns_expr = join(" ", @exprs);
+
+	return $service_patterns_expr;
+}
+
+sub output_autoscripts {
+	my ($package, $dbs_extra_add, $inst_lines, $db_services) = @_;
+	my @dbs_extra_add = @{$dbs_extra_add};
+	my @inst_lines = @{$inst_lines};
+	my %db_services = %{$db_services};
+
+	# Turn the lists of database-specific services into regular expressions.
+	my @dbs = sort(keys %db_services);
+	foreach my $db (@dbs) {
+		my @db_services = @{$db_services{$db}};
+		my $db_services_expr = join("|", @db_services);
+		$db_services{$db} = $db_services_expr;
+	}
+
+	# Aggregate the target databases and service regular expressions into
+	# grep-compatible guard expressions.
+	my $service_patterns_expr = service_patterns_expr(\%db_services);
+
+	# Add a snippet in preinst to detect installation of non-purged packages.
+	autoscript($package, "preinst", "preinst-nss");
+
+	# Generate one snippet for each extra NSS databases to be added.
+	foreach my $db_extra (@dbs_extra_add) {
+		autoscript($package, "postinst", "postinst-nss-db", {
+			"DB" => $db_extra,
+		});
+	}
+
+	# Generate a single snippet with a sequence of installation instructions.
+	if (@inst_lines) {
+		my $inst_lines_expr = join("\n\t\t", @inst_lines);
+		autoscript($package, "postinst", "postinst-nss", {
+			"SERVICE_PATTERNS" => $service_patterns_expr,
+			"OPERATIONS" => $inst_lines_expr,
+		});
+	}
+
+	# Generate one snippet for each extra NSS databases to be removed.
+	# NOTE: DB removal must happen after service removal, however debhelper
+	# adds the `postrm` snippets in reverse order. For this reason the
+	# snippets for the extra DBs must be added first.
+	foreach my $db_extra (@dbs_extra_add) {
+		autoscript($package, "postrm", "postrm-nss-db", {
+			"DB" => $db_extra,
+		});
+	}
+
+	# Generate one snippet for each NSS DB, removing only the services
+	# related to that DB.
+	foreach my $db (@dbs) {
+		my $db_services_expr = $db_services{$db};
+		autoscript($package, "postrm", "postrm-nss", {
+			"DB"            => $db,
+			"SERVICE_NAMES" => $db_services_expr,
+		});
+	}
+}
+
+process();
+
+=head1 SEE ALSO
+
+L<debhelper(7)>
+
+This program is a debhelper addon.
+
+=head1 AUTHOR
+
+Gioele Barabucci <gioele@svario.it>
+
+=cut

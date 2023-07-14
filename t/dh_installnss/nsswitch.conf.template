@@ -1,0 +1,17 @@
+# A sample /etc/nsswitch.conf file
+
+passwd:         files systemd
+group:          files systemd
+shadow:         files
+gshadow:        files
+
+#hosts:          files mdns4_minimal [NOTFOUND=return] dns
+hosts:          files mdns4 [NOTFOUND=return] dns mymachines
+networks:       files
+
+protocols:      db files
+services:       db files
+ethers:         db files
+rpc:            db files
+
+netgroup:       nis

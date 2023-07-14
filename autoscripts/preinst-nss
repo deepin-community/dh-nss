@@ -1,0 +1,4 @@
+if [ "$1" = install ]; then
+	# Signal to postinst that the NSS services should be installed, even if the package has been removed but not purged.
+	touch "${DPKG_ROOT}/etc/nsswitch.conf.nss.${DPKG_MAINTSCRIPT_PACKAGE}-will-install"
+fi

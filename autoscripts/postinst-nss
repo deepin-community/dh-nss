@@ -1,0 +1,6 @@
+if [ "$1" = "configure" ] && [ -f "${DPKG_ROOT}/etc/nsswitch.conf.nss.${DPKG_MAINTSCRIPT_PACKAGE}-will-install" ] && [ -e "${DPKG_ROOT}/etc/nsswitch.conf" ] ; then
+	if ! grep -q -E #SERVICE_PATTERNS# "${DPKG_ROOT}/etc/nsswitch.conf" ; then
+		#OPERATIONS#
+	fi
+	rm "${DPKG_ROOT}/etc/nsswitch.conf.nss.${DPKG_MAINTSCRIPT_PACKAGE}-will-install"
+fi
