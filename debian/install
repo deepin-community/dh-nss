@@ -1,0 +1,3 @@
+autoscripts/*	usr/share/debhelper/autoscripts
+dh_installnss	usr/bin
+installnss.pm	usr/share/perl5/Debian/Debhelper/Sequence

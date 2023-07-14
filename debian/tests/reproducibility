@@ -1,0 +1,49 @@
+#!/bin/sh
+
+set -eu
+
+. "$(dirname "$0")/shared-functions.sh"
+
+testname="$(basename "$0")"
+pkgname="libnss-test-$testname"
+
+nss_lines="
+passwd  last mynss
+group   last mynss
+shadow  last mynss
+gshadow last mynss
+"
+
+echo "Enable fr_CH.UTF-8 locale..."
+echo "fr_CH.UTF-8 UTF-8" >> /etc/locale.gen
+locale-gen
+locale -a | grep -q "fr_CH.UTF-8" && echo "OK"
+
+echo "Set up and build test package LC_ALL=C.UTF-8..."
+cd "$AUTOPKGTEST_TMP"
+
+mkdir "$pkgname-c"
+cd "$pkgname-c"
+setup_pkg "$pkgname" "$testname"
+build_pkg "$pkgname" "1" "$nss_lines"
+cd "$AUTOPKGTEST_TMP"
+dpkg-deb -e "${pkgname}_1_all.deb" c
+dpkg-deb -x "${pkgname}_1_all.deb" c
+
+echo "Set up and build test package LC_ALL=fr_CH.UTF-8..."
+cd "$AUTOPKGTEST_TMP"
+
+mkdir "$pkgname-fr"
+cd "$pkgname-fr"
+export LC_ALL="fr_CH.UTF-8"
+export LANGUAGE="fr_CH.UTF-8:fr"
+setup_pkg "$pkgname" "$testname"
+build_pkg "$pkgname" "1" "$nss_lines"
+cd "$AUTOPKGTEST_TMP"
+dpkg-deb -e "${pkgname}_1_all.deb" fr
+dpkg-deb -x "${pkgname}_1_all.deb" fr
+
+echo "Test whether both packages are identical..."
+diff -ur c/ fr/ && echo "OK"
+
+

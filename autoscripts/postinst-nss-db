@@ -1,0 +1,5 @@
+if [ "$1" = "configure" ] && [ -e "${DPKG_ROOT}/etc/nsswitch.conf" ] ; then
+	if ! grep -q -E '^#DB#:' "${DPKG_ROOT}/etc/nsswitch.conf" ; then
+		echo "#DB#: " >> "${DPKG_ROOT}/etc/nsswitch.conf"
+	fi
+fi

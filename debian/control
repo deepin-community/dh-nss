@@ -1,15 +1,27 @@
-Source: template-repository
-Section: unknown
+Source: dh-nss
+Section: devel
 Priority: optional
-Maintainer: Tsic404 <liuheng@deepin.org>
-Build-Depends: debhelper (>= 11)
-Standards-Version: 4.1.3
-Homepage: https://github.com/deepin-community/template-repository
-#Vcs-Browser: https://salsa.debian.org/debian/deepin-community-template-repository
-#Vcs-Git: https://salsa.debian.org/debian/deepin-community-template-repository.git
+Maintainer: Gioele Barabucci <gioele@svario.it>
+Rules-Requires-Root: no
+Build-Depends:
+ debhelper-compat (= 13),
+Standards-Version: 4.6.1
+Homepage: https://salsa.debian.org/gioele/dh-nss
+Vcs-Browser: https://salsa.debian.org/gioele/dh-nss
+Vcs-Git: https://salsa.debian.org/gioele/dh-nss.git
 
-Package: template-repository
-Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: <insert up to 60 chars description>
- <insert long description, indented with spaces>
+Package: dh-nss
+Architecture: all
+Multi-Arch: foreign
+Depends:
+ libdebhelper-perl,
+ ${misc:Depends},
+ ${perl:Depends},
+Enhances:
+ debhelper,
+Provides:
+ dh-sequence-installnss,
+Description: debhelper addon to inject NSS services into /etc/nsswitch.conf
+ The` dh_installnss` debhelper provides a declarative way for NSS-related
+ packages to express how the NSS services they supply should be installed
+ and in which order.

@@ -1,5 +1,89 @@
-template-repository (1.0-1) unstable; urgency=medium
+dh-nss (1.7) unstable; urgency=medium
 
-  * Initial release
+  * dh_installnss: Add `database-add` and `database-require` to manage
+    non-standard DBs
+  * dh_installnss: Document how to deal with non-standard NSS database
+    (Closes: #1019728)
+  * dh_installnss: Fix perldoc formatting errors
+  * autoscripts/preinst-nss: Remove unused variable substitution
+  * Makefile: Add instructions on how to generate man page
+  * Makefile: Add target to update version in executable
+  * d/gbp.conf: Run `make update-version` in dch postedit hook
+  * d/gbp.conf: Use DEP-14 branch naming
 
- -- Tsic404 <liuheng@deepin.org>  Sat, 28 Jan 2023 13:46:49 +0800
+ -- Gioele Barabucci <gioele@svario.it>  Tue, 01 Nov 2022 09:24:30 +0100
+
+dh-nss (1.6) unstable; urgency=medium
+
+  * dh_installnss: Do not generate debhelper snippets if .nss contains
+    no directives
+  * dh_installnss: Add new NSS database when `position=database`
+  * dh_installnss: Limit search for installed services to target databases only
+    (Closes: #1018001)
+  * dh_installnss: Streamline generation of regular expressions
+  * dh_installnss: Validate fields of .nss files
+  * autoscripts/postinst-nss: Do not inject services during upgrades
+
+ -- Gioele Barabucci <gioele@svario.it>  Wed, 24 Aug 2022 17:30:32 +0200
+
+dh-nss (1.5) unstable; urgency=medium
+
+  * autoscripts/postinst-nss: Fix detection of previous modifications
+    (Closes: #1017101)
+  * autoscripts/postrm-nss: Do not modify comments during service removal
+  * dh_installnss: Fix uniqueness test for service names
+  * d/tests/control: Mark shellcheck test as superficial
+  * d/tests/doc-example-comments: Test also reinstallation
+  * autoscripts/postrm-nss: Match actions in a case-insensitive way
+  * autoscripts/postrm-nss: Use different labels instead of `/g` for
+    replacement loops
+
+ -- Gioele Barabucci <gioele@svario.it>  Sun, 14 Aug 2022 03:44:23 +0200
+
+dh-nss (1.4) unstable; urgency=medium
+
+  * autoscripts: Use `grep -q` instead of redirecting stdout
+  * autoscripts/postrm-nss: Properly handle non-purged packages
+  * autoscripts/postinst-nss: Handle reinstallation of non purged packages
+  * d/tests/doc-example: Test package removal and reinstallation
+  * debian/tests: Add shellcheck test for generated maintscripts
+  * t/dh_installnss: Test multiple positions in different order
+  * autoscripts: Assume DPKG_ROOT is set but possibly empty
+
+ -- Gioele Barabucci <gioele@svario.it>  Wed, 10 Aug 2022 18:02:07 +0200
+
+dh-nss (1.3) unstable; urgency=medium
+
+  * dh_installnss: Fix order of removal of services in postrm
+  * d/tests: Add test for binary reproducibility
+  * d/gbp.conf: Automatically update version number
+
+ -- Gioele Barabucci <gioele@svario.it>  Mon, 08 Aug 2022 10:46:18 +0200
+
+dh-nss (1.2) unstable; urgency=medium
+
+  * dh_installnss: Improve reproducibility of postrm
+
+ -- Gioele Barabucci <gioele@svario.it>  Mon, 08 Aug 2022 01:38:43 +0200
+
+dh-nss (1.1) unstable; urgency=medium
+
+  * dh_installnss: Properly handle comments in db lines
+  * autoscripts/postrm-nss: Remove services during `remove` or `purge`
+  * d/control: Add Enhances: debhelper
+  * d/control: Add Perl dependencies
+  * d/control: Mark package as Multi-Arch: foreign
+  * d/copyright: Change license to 0BSD
+  * d/copyright: Mark vendored t/Test/* as GPL-2+
+  * d/gitlab-ci: Add standard CI instructions
+  * d/install: wrap-and-sort -ast
+  * d/tests: Add autopkgtest tests
+  * d/watch: Remove watch for native package
+
+ -- Gioele Barabucci <gioele@svario.it>  Sun, 07 Aug 2022 16:37:41 +0200
+
+dh-nss (1) unstable; urgency=medium
+
+  * Initial release (Closes: #1016100)
+
+ -- Gioele Barabucci <gioele@svario.it>  Mon, 25 Jul 2022 18:48:27 +0200

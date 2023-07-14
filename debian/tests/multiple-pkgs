@@ -1,0 +1,60 @@
+#!/bin/sh
+
+set -eu
+
+. "$(dirname "$0")/shared-functions.sh"
+
+testname1="$(basename "$0")-a"
+testname2="$(basename "$0")-b"
+pkgname1="libnss-test-$testname1"
+pkgname2="libnss-test-$testname2"
+
+nss_lines1="
+hosts first mynss_a1
+hosts last  mynss_a2 [NOTFOUND=return]"
+
+nss_lines2="
+hosts after=mynss_a2 mynss_b1
+hosts before=dns mynss_b2"
+
+
+expected_services_initial="files dns"
+expected_services_after_inst1="mynss_a1 files dns mynss_a2 [NOTFOUND=return]"
+expected_services_after_inst2="mynss_a1 files mynss_b2 dns mynss_a2 [NOTFOUND=return] mynss_b1"
+expected_services_after_rm1="files mynss_b2 dns mynss_b1"
+expected_services_after_rm2="$expected_services_initial"
+
+echo "Set up and build test packages..."
+cd "$AUTOPKGTEST_TMP"
+mkdir "$pkgname1"
+cd "$pkgname1"
+setup_pkg "$pkgname1" "$testname1"
+build_pkg "$pkgname1" "1.1" "$nss_lines1"
+
+cd "$AUTOPKGTEST_TMP"
+mkdir "$pkgname2"
+cd "$pkgname2"
+setup_pkg "$pkgname2" "$testname2"
+build_pkg "$pkgname2" "2.2" "$nss_lines2"
+
+cd "$AUTOPKGTEST_TMP"
+
+echo "Set up /etc/nsswitch.conf..."
+echo "$NSSWITCH_CONF" > /etc/nsswitch.conf
+check_line "hosts" "$expected_services_initial"
+
+echo "Test that installing package A installs the services..."
+dpkg --install "${pkgname1}_1.1_all.deb"
+check_line "hosts" "$expected_services_after_inst1"
+
+echo "Test that installing package B installs the other services..."
+dpkg --install "${pkgname2}_2.2_all.deb"
+check_line "hosts" "$expected_services_after_inst2"
+
+echo "Test that removing package A removes its services..."
+dpkg --remove "$pkgname1"
+check_line "hosts" "$expected_services_after_rm1"
+
+echo "Test that removing package B removes its services..."
+dpkg --remove "$pkgname2"
+check_line "hosts" "$expected_services_after_rm2"

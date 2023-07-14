@@ -1,0 +1,26 @@
+#!/bin/sh
+
+set -eu
+
+. "$(dirname "$0")/shared-functions.sh"
+
+testname="$(basename "$0")"
+pkgname="libnss-test-$testname"
+
+nss_lines="hosts first mynss"
+
+echo "Set up and build test packages..."
+cd "$AUTOPKGTEST_TMP"
+mkdir "$pkgname"
+cd "$pkgname"
+setup_pkg "$pkgname" "$testname"
+build_pkg "$pkgname" "1" "$nss_lines"
+
+cd "$AUTOPKGTEST_TMP"
+
+echo "Remove /etc/nsswitch.conf..."
+rm /etc/nsswitch.conf
+
+echo "Test that installing the package does not recreate /etc/nsswitch.conf"
+dpkg --install "${pkgname}_1_all.deb"
+test ! -e /etc/nsswitch.conf && echo "OK"
